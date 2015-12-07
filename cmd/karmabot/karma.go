@@ -6,20 +6,15 @@ import (
 	"encoding/csv"
 	"fmt"
 	"github.com/adufrene/karmabot/Godeps/_workspace/src/github.com/adufrene/gobot"
-	"github.com/adufrene/karmabot/Godeps/_workspace/src/gopkg.in/yaml.v2"
-	"io/ioutil"
 	"os"
 	"regexp"
 	"strings"
 )
 
 const (
+	API_TOKEN  = "xoxb-16117683524-AJdMORD8PMjPELCIsP3cuMOQ"
 	KARMA_FILE = "karma.csv"
 )
-
-type Configuration struct {
-	Token string `yaml:"apiToken"`
-}
 
 var userIdRegex *regexp.Regexp
 var requestKarmaRegex *regexp.Regexp
@@ -31,30 +26,13 @@ func main() {
 	userIdRegex = regexp.MustCompile(`^<@U[0-9A-Z]{8}>$`)
 
 	go loadKarmaCount()
-	apiToken, err := readApiToken()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading api token: %s\n", err.Error())
-		os.Exit(1)
-	}
-	gobot := gobot.NewGobot(apiToken)
+	gobot := gobot.NewGobot(API_TOKEN)
 	gobot.RegisterMessageFunction(delegateFunction)
 	gobot.RegisterSetupFunction(setup)
 	if err := gobot.Listen(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error while listening: %s\n", err.Error())
 		os.Exit(1)
 	}
-}
-
-func readApiToken() (string, error) {
-	file, err := ioutil.ReadFile(os.Args[1])
-	if err != nil {
-		return "", err
-	}
-	var conf Configuration
-	if err = yaml.Unmarshal(file, &conf); err != nil {
-		return "", err
-	}
-	return conf.Token, nil
 }
 
 func setup(slackApi gobot.SlackApi) {
