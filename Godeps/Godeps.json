@@ -12,10 +12,6 @@
 		{
 			"ImportPath": "github.com/gorilla/websocket",
 			"Rev": "361d4c0ffd78338ebe0a9e6320cdbe115d7dc026"
-		},
-		{
-			"ImportPath": "gopkg.in/yaml.v2",
-			"Rev": "f7716cbe52baa25d2e9b0d0da546fcf909fc16b4"
 		}
 	]
 }
