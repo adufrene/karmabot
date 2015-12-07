@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"github.com/adufrene/karmabot/Godeps/_workspace/src/github.com/adufrene/gobot"
+	"net/http"
 	"os"
 	"regexp"
 	"strings"
@@ -25,6 +26,7 @@ var karmaCount map[string]int
 func main() {
 	userIdRegex = regexp.MustCompile(`^<@U[0-9A-Z]{8}>$`)
 
+	go dummyWebServer()
 	go loadKarmaCount()
 	gobot := gobot.NewGobot(API_TOKEN)
 	gobot.RegisterMessageFunction(delegateFunction)
@@ -33,6 +35,15 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error while listening: %s\n", err.Error())
 		os.Exit(1)
 	}
+}
+
+func dummyWebServer() {
+	port := os.Getenv("PORT")
+	if len(port) == 0 {
+		return
+	}
+	fmt.Printf("Listenining on port %s\n", port)
+	http.ListenAndServe(":"+port, nil)
 }
 
 func setup(slackApi gobot.SlackApi) {

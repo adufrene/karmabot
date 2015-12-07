@@ -1,1 +1,1 @@
-web: karmabot ../configuration.yaml
+web: karmabot
