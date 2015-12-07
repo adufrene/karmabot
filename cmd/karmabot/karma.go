@@ -13,7 +13,6 @@ import (
 )
 
 const (
-	API_TOKEN  = "xoxb-16117683524-AJdMORD8PMjPELCIsP3cuMOQ"
 	KARMA_FILE = "karma.csv"
 )
 
@@ -26,15 +25,28 @@ var karmaCount map[string]int
 func main() {
 	userIdRegex = regexp.MustCompile(`^<@U[0-9A-Z]{8}>$`)
 
+	apiToken, err := loadApiToken()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Could not read api token from environment")
+		os.Exit(1)
+	}
 	go dummyWebServer()
 	go loadKarmaCount()
-	gobot := gobot.NewGobot(API_TOKEN)
+	gobot := gobot.NewGobot(apiToken)
 	gobot.RegisterMessageFunction(delegateFunction)
 	gobot.RegisterSetupFunction(setup)
 	if err := gobot.Listen(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error while listening: %s\n", err.Error())
 		os.Exit(1)
 	}
+}
+
+func loadApiToken() (string, error) {
+	token := os.Getenv("KARMABOT_API")
+	if token == "" {
+		return "", fmt.Errorf("Missing configuration KARMABOT_API")
+	}
+	return token, nil
 }
 
 func dummyWebServer() {
