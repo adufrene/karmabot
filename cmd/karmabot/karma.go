@@ -46,7 +46,7 @@ func main() {
 }
 
 func readApiToken() (string, error) {
-	file, err := ioutil.ReadFile("configuration.yaml")
+	file, err := ioutil.ReadFile(os.Args[1])
 	if err != nil {
 		return "", err
 	}
