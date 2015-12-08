@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"encoding/csv"
 	"fmt"
-	"github.com/adufrene/karmabot/Godeps/_workspace/src/github.com/adufrene/gobot"
+	"github.com/adufrene/gobot"
+	"gopkg.in/yaml.v2"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"regexp"
@@ -15,6 +17,10 @@ import (
 const (
 	KARMA_FILE = "karma.csv"
 )
+
+type Configuration struct {
+	Token string `yaml:"apiToken"`
+}
 
 var userIdRegex *regexp.Regexp
 var requestKarmaRegex *regexp.Regexp
@@ -27,7 +33,7 @@ func main() {
 
 	apiToken, err := loadApiToken()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Could not read api token from environment")
+		fmt.Fprintln(os.Stderr, "Could not find api token")
 		os.Exit(1)
 	}
 	go dummyWebServer()
@@ -43,10 +49,22 @@ func main() {
 
 func loadApiToken() (string, error) {
 	token := os.Getenv("KARMABOT_API")
-	if token == "" {
-		return "", fmt.Errorf("Missing configuration KARMABOT_API")
+	if token != "" {
+		return token, nil
 	}
-	return token, nil
+
+	file, err := ioutil.ReadFile("configuration.yaml")
+	if err != nil {
+		return "", err
+	}
+	var conf Configuration
+	if err = yaml.Unmarshal(file, &conf); err != nil {
+		return "", err
+	}
+	if len(conf.Token) == 0 {
+		return "", fmt.Errorf("Empty token in configuration file")
+	}
+	return conf.Token, nil
 }
 
 func dummyWebServer() {
@@ -67,18 +85,34 @@ func setup(slackApi gobot.SlackApi) {
 
 	myUserId = user.Id
 	myUserName = user.Name
-	requestKarmaRegex = regexp.MustCompile(fmt.Sprintf("(<@%s>|%s).*karma", myUserId, myUserName))
+	requestKarmaRegex = regexp.MustCompile(fmt.Sprintf("(<@%s>|%s).*(karma|help)",
+		strings.ToLower(myUserId), strings.ToLower(myUserName)))
+	fmt.Println(requestKarmaRegex)
 }
 
 func delegateFunction(slackApi gobot.SlackApi, message gobot.Message) {
-	if requestKarmaRegex.MatchString(message.Text) {
-		displayKarma(slackApi, message.Channel)
+	text := strings.ToLower(message.Text)
+	fmt.Printf("Checking text `%s`\n", text)
+	if requestKarmaRegex.MatchString(text) {
+		request := requestKarmaRegex.FindStringSubmatch(text)[2]
+		fmt.Printf("Received Request: %s\n", request)
+		if "karma" == request {
+			displayKarma(slackApi, message.Channel)
+		} else if "help" == request {
+			displayHelp(slackApi, message.Channel)
+		} else {
+			fmt.Fprintln(os.Stderr, "Shouldn't get to this branch...")
+		}
 	} else {
 		tryUpdateKarma(slackApi, message)
 	}
 }
 
 func displayKarma(slackApi gobot.SlackApi, channel string) {
+	if len(karmaCount) == 0 {
+		slackApi.PostMessage(channel, "No karma yet")
+		return
+	}
 	users, err := slackApi.GetUsersInTeam()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error fetching users\n")
@@ -99,6 +133,15 @@ func displayKarma(slackApi gobot.SlackApi, channel string) {
 	}
 	message.WriteString("```")
 	slackApi.PostMessage(channel, message.String())
+}
+
+func displayHelp(slackApi gobot.SlackApi, channel string) {
+	message := `
+	karmabot karma - Display current karma
+	user[++|--] - give or remove karma from user
+	karmabot help - Ask karmabot for help`
+
+	slackApi.PostMessage(channel, fmt.Sprintf("```%s```", message))
 }
 
 func tryUpdateKarma(slackApi gobot.SlackApi, message gobot.Message) {
