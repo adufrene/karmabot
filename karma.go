@@ -29,7 +29,7 @@ func main() {
 
 	apiToken, err := loadApiToken()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Could not find api token")
+		fmt.Fprintf(os.Stderr, "Could not find api token: %s\n", err.Error())
 		os.Exit(1)
 	}
 
@@ -58,7 +58,12 @@ func loadApiToken() (string, error) {
 		return token, nil
 	}
 
-	file, err := ioutil.ReadFile("configuration.yaml")
+	filename := "configuration.yaml"
+	if len(os.Args) > 2 && os.Args[2] != "" {
+		filename = os.Args[2]
+	}
+
+	file, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return "", err
 	}
