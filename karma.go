@@ -19,13 +19,17 @@ type Configuration struct {
 
 var userIdRegex *regexp.Regexp
 var requestKarmaRegex *regexp.Regexp
+var assignKarmaRegex *regexp.Regexp
+
 var myUserId string
 var myUserName string
+
 var karmaCount map[string]int
 var karmaFile string
 
 func main() {
 	userIdRegex = regexp.MustCompile(`^<@U[0-9A-Z]{8}>$`)
+	assignKarmaRegex = regexp.MustCompile(`\b(\w+)((\+\+|--)+)`)
 
 	apiToken, err := loadApiToken()
 	if err != nil {
@@ -135,9 +139,9 @@ func displayKarma(slackApi gobot.SlackApi, channel string) {
 
 func displayHelp(slackApi gobot.SlackApi, channel string) {
 	message := `
-	karmabot karma - Display current karma
-	user[++|--] - give or remove karma from user
-	karmabot help - Ask karmabot for help`
+ 		karmabot karma - Display current karma
+ 		user[++|--] - give or remove karma from user
+ 		karmabot help - Ask karmabot for help`
 
 	slackApi.PostMessage(channel, fmt.Sprintf("```%s```", message))
 }
@@ -149,7 +153,9 @@ func tryUpdateKarma(slackApi gobot.SlackApi, message gobot.Message) {
 	scanner.Split(bufio.ScanWords)
 	for scanner.Scan() {
 		word := scanner.Text()
-		if strings.HasSuffix(word, "++") || strings.HasSuffix(word, "--") {
+
+		if assignKarmaRegex.MatchString(word) {
+			matches := assignKarmaRegex.FindStringSubmatch(word)
 			// Lazy load users
 			if users == nil {
 				users, err = slackApi.GetUsersInTeam()
@@ -158,39 +164,57 @@ func tryUpdateKarma(slackApi gobot.SlackApi, message gobot.Message) {
 					return
 				}
 			}
-			resolveUserAndTryKarma(slackApi, users, word, message)
+			resolveUserAndTryKarma(slackApi, users, matches[1], parseActions(matches[2]), message)
 		}
 	}
 }
 
-func resolveUserAndTryKarma(slackApi gobot.SlackApi, users []gobot.SlackUser, karmaCommand string, message gobot.Message) {
-	suffix := karmaCommand[len(karmaCommand)-2:]
-	userName := karmaCommand[:len(karmaCommand)-2]
-	userId, err := resolveUser(users, userName)
+func parseActions(allActions string) []string {
+	result := make([]string, len(allActions)/2)
+
+	for i := 0; i < len(allActions); i += 2 {
+		result[i/2] = allActions[i : i+2]
+	}
+
+	return result
+}
+
+func resolveUserAndTryKarma(slackApi gobot.SlackApi, users []gobot.SlackUser, user string, actions []string, message gobot.Message) {
+	userId, err := resolveUser(users, user)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error resolving user: %s\n", err.Error())
-		slackApi.PostMessage(message.Channel, fmt.Sprintf("Who the heck is %s?\n", userName))
+		slackApi.PostMessage(message.Channel, fmt.Sprintf("Who the heck is %s?\n", user))
 		return
 	}
 	if userId != message.User {
-		doKarma(userId, suffix)
-		if userId == myUserId && suffix == "++" {
-			slackApi.PostMessage(message.Channel, fmt.Sprintf("Thank you <@%s>!", message.User))
-		} else if userId == myUserId && suffix == "--" {
-			slackApi.PostMessage(message.Channel, ":angry:")
+		if response, shouldPost := doKarma(userId, actions, message.User); shouldPost {
+			slackApi.PostMessage(message.Channel, response)
 		}
 	} else {
 		slackApi.PostMessage(message.Channel, fmt.Sprintf("Nice try <@%s>!", userId))
 	}
 }
 
-func doKarma(user, action string) {
-	go writeKarmaCount(user, action)
-	if action == "++" {
-		karmaCount[user]++
-	} else if action == "--" {
-		karmaCount[user]--
+func doKarma(user string, actions []string, from string) (string, bool) {
+	go writeKarmaCount(user, actions)
+	total := 0
+	for _, action := range actions {
+		if action == "++" {
+			total++
+		} else if action == "--" {
+			total--
+		}
 	}
+	karmaCount[user] += total
+
+	if user == myUserId {
+		if total > 0 {
+			return fmt.Sprintf("Thank you <@%s>!", from), true
+		} else if total < 0 {
+			return ":angry:", true
+		}
+	}
+	return "", false
 }
 
 func loadKarmaCount() {
@@ -230,7 +254,7 @@ func loadKarmaCount() {
 
 }
 
-func writeKarmaCount(user, action string) {
+func writeKarmaCount(user string, actions []string) {
 	file, err := os.OpenFile(karmaFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not open/create file %s\n", karmaFile)
@@ -239,7 +263,9 @@ func writeKarmaCount(user, action string) {
 	defer file.Close()
 
 	writer := csv.NewWriter(file)
-	writer.Write([]string{user, action})
+	for _, action := range actions {
+		writer.Write([]string{user, action})
+	}
 	writer.Flush()
 }
 
