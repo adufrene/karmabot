@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 	. "github.com/adufrene/karmabot/Godeps/_workspace/src/github.com/adufrene/gobot"
-	"gopkg.in/yaml.v2"
+	"github.com/adufrene/karmabot/Godeps/_workspace/src/gopkg.in/yaml.v2"
 	"io/ioutil"
 	"os"
 	"testing"
