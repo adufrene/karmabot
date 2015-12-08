@@ -8,14 +8,9 @@ import (
 	"github.com/adufrene/gobot"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"regexp"
 	"strings"
-)
-
-const (
-	KARMA_FILE = "karma.csv"
 )
 
 type Configuration struct {
@@ -27,6 +22,7 @@ var requestKarmaRegex *regexp.Regexp
 var myUserId string
 var myUserName string
 var karmaCount map[string]int
+var karmaFile string
 
 func main() {
 	userIdRegex = regexp.MustCompile(`^<@U[0-9A-Z]{8}>$`)
@@ -36,7 +32,8 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Could not find api token")
 		os.Exit(1)
 	}
-	go dummyWebServer()
+
+	initKarmaFile()
 	go loadKarmaCount()
 	gobot := gobot.NewGobot(apiToken)
 	gobot.RegisterMessageFunction(delegateFunction)
@@ -44,6 +41,14 @@ func main() {
 	if err := gobot.Listen(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error while listening: %s\n", err.Error())
 		os.Exit(1)
+	}
+}
+
+func initKarmaFile() {
+	if len(os.Args) > 1 && os.Args[1] != "" {
+		karmaFile = os.Args[1]
+	} else {
+		karmaFile = "karma.csv"
 	}
 }
 
@@ -67,15 +72,6 @@ func loadApiToken() (string, error) {
 	return conf.Token, nil
 }
 
-func dummyWebServer() {
-	port := os.Getenv("PORT")
-	if len(port) == 0 {
-		return
-	}
-	fmt.Printf("Listenining on port %s\n", port)
-	http.ListenAndServe(":"+port, nil)
-}
-
 func setup(slackApi gobot.SlackApi) {
 	user, err := slackApi.Whoami()
 	if err != nil {
@@ -87,15 +83,12 @@ func setup(slackApi gobot.SlackApi) {
 	myUserName = user.Name
 	requestKarmaRegex = regexp.MustCompile(fmt.Sprintf("(<@%s>|%s).*(karma|help)",
 		strings.ToLower(myUserId), strings.ToLower(myUserName)))
-	fmt.Println(requestKarmaRegex)
 }
 
 func delegateFunction(slackApi gobot.SlackApi, message gobot.Message) {
 	text := strings.ToLower(message.Text)
-	fmt.Printf("Checking text `%s`\n", text)
 	if requestKarmaRegex.MatchString(text) {
 		request := requestKarmaRegex.FindStringSubmatch(text)[2]
-		fmt.Printf("Received Request: %s\n", request)
 		if "karma" == request {
 			displayKarma(slackApi, message.Channel)
 		} else if "help" == request {
@@ -198,13 +191,13 @@ func doKarma(user, action string) {
 func loadKarmaCount() {
 	karmaCount = make(map[string]int)
 
-	if _, err := os.Stat(KARMA_FILE); os.IsNotExist(err) {
+	if _, err := os.Stat(karmaFile); os.IsNotExist(err) {
 		return
 	}
 
-	file, err := os.OpenFile(KARMA_FILE, os.O_RDONLY, 0600)
+	file, err := os.OpenFile(karmaFile, os.O_RDONLY, 0600)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not open file %s\n", KARMA_FILE)
+		fmt.Fprintf(os.Stderr, "Could not open file %s\n", karmaFile)
 		os.Exit(1)
 	}
 	defer file.Close()
@@ -233,9 +226,9 @@ func loadKarmaCount() {
 }
 
 func writeKarmaCount(user, action string) {
-	file, err := os.OpenFile(KARMA_FILE, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	file, err := os.OpenFile(karmaFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not open/create file %s\n", KARMA_FILE)
+		fmt.Fprintf(os.Stderr, "Could not open/create file %s\n", karmaFile)
 		os.Exit(1)
 	}
 	defer file.Close()
